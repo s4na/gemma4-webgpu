@@ -139,12 +139,12 @@ function App() {
             )}
             {speechSupported && isListening && (
               <button
-                className="btn btn-convert"
+                className="btn btn-voice-stop"
                 type="button"
                 onClick={stopSpeech}
-                title="Convert speech to text"
+                title="Stop voice input"
               >
-                変換
+                停止
               </button>
             )}
             {status === 'generating' ? (

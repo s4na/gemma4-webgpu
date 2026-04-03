@@ -28,7 +28,6 @@ declare global {
 export function useSpeechRecognition(onResult: (transcript: string) => void) {
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
-  const transcriptRef = useRef('')
 
   const supported =
     typeof window !== 'undefined' &&
@@ -36,8 +35,6 @@ export function useSpeechRecognition(onResult: (transcript: string) => void) {
 
   const start = useCallback(() => {
     if (!supported) return
-
-    transcriptRef.current = ''
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     const recognition = new SpeechRecognition()
@@ -48,15 +45,12 @@ export function useSpeechRecognition(onResult: (transcript: string) => void) {
     recognition.addEventListener('result', (e: Event) => {
       const event = e as SpeechRecognitionEvent
       const transcript = event.results[event.resultIndex][0].transcript
-      transcriptRef.current += transcript
+      if (transcript.trim()) {
+        onResult(transcript)
+      }
     })
 
     recognition.addEventListener('end', () => {
-      const text = transcriptRef.current.trim()
-      if (text) {
-        onResult(text)
-      }
-      transcriptRef.current = ''
       setIsListening(false)
       recognitionRef.current = null
     })
@@ -66,7 +60,6 @@ export function useSpeechRecognition(onResult: (transcript: string) => void) {
       if (event.error !== 'aborted') {
         console.error('Speech recognition error:', event.error)
       }
-      transcriptRef.current = ''
       setIsListening(false)
       recognitionRef.current = null
     })
