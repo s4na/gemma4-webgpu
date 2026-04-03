@@ -60,13 +60,12 @@ export function useGemma() {
     })
 
     workerRef.current = worker
-    return () => worker.terminate()
-  }, [])
 
-  const loadModel = useCallback(() => {
-    setError(null)
+    // Auto-load model on mount (cached models load instantly)
     setStatus('loading')
-    workerRef.current?.postMessage({ type: 'load' })
+    worker.postMessage({ type: 'load' })
+
+    return () => worker.terminate()
   }, [])
 
   const sendMessage = useCallback((content: string) => {
@@ -88,7 +87,8 @@ export function useGemma() {
 
   const retry = useCallback(() => {
     setError(null)
-    setStatus('ready')
+    setStatus('loading')
+    workerRef.current?.postMessage({ type: 'load' })
   }, [])
 
   return {
@@ -98,7 +98,6 @@ export function useGemma() {
     messages,
     streamingContent,
     error,
-    loadModel,
     sendMessage,
     stopGenerating,
     retry,
