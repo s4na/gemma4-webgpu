@@ -26,9 +26,11 @@ function App() {
     streamingContent,
     error,
     debugLogs,
+    needsManualLoad,
     sendMessage,
     stopGenerating,
     retry,
+    startLoad,
     loadMessages,
   } = useGemma()
 
@@ -224,7 +226,16 @@ function App() {
           </div>
         )}
 
-        {(status === 'idle' || status === 'loading') && webgpuSupported && (
+        {needsManualLoad && webgpuSupported && (
+          <div className="load-section">
+            <p>Model loading was interrupted. Tap below to try again.</p>
+            <button className="btn btn-primary" onClick={startLoad} style={{ marginTop: 8 }}>
+              Load Model
+            </button>
+          </div>
+        )}
+
+        {!needsManualLoad && (status === 'idle' || status === 'loading') && webgpuSupported && (
           <div className="load-section">
             <p>{loadingMessage || 'Loading model...'}</p>
             {loadingProgress !== null && (
