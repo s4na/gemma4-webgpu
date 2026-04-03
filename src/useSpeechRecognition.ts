@@ -28,6 +28,7 @@ declare global {
 export function useSpeechRecognition(onResult: (transcript: string) => void) {
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  const transcriptRef = useRef('')
 
   const supported =
     typeof window !== 'undefined' &&
@@ -36,19 +37,26 @@ export function useSpeechRecognition(onResult: (transcript: string) => void) {
   const start = useCallback(() => {
     if (!supported) return
 
+    transcriptRef.current = ''
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     const recognition = new SpeechRecognition()
     recognition.lang = navigator.language || 'ja-JP'
     recognition.interimResults = false
-    recognition.continuous = false
+    recognition.continuous = true
 
     recognition.addEventListener('result', (e: Event) => {
       const event = e as SpeechRecognitionEvent
       const transcript = event.results[event.resultIndex][0].transcript
-      onResult(transcript)
+      transcriptRef.current += transcript
     })
 
     recognition.addEventListener('end', () => {
+      const text = transcriptRef.current.trim()
+      if (text) {
+        onResult(text)
+      }
+      transcriptRef.current = ''
       setIsListening(false)
       recognitionRef.current = null
     })
@@ -58,6 +66,7 @@ export function useSpeechRecognition(onResult: (transcript: string) => void) {
       if (event.error !== 'aborted') {
         console.error('Speech recognition error:', event.error)
       }
+      transcriptRef.current = ''
       setIsListening(false)
       recognitionRef.current = null
     })
@@ -71,13 +80,5 @@ export function useSpeechRecognition(onResult: (transcript: string) => void) {
     recognitionRef.current?.stop()
   }, [])
 
-  const toggle = useCallback(() => {
-    if (isListening) {
-      stop()
-    } else {
-      start()
-    }
-  }, [isListening, start, stop])
-
-  return { isListening, supported, toggle }
+  return { isListening, supported, start, stop }
 }
