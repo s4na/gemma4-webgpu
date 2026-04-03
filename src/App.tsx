@@ -35,7 +35,7 @@ function App() {
   const handleSpeechResult = useCallback((transcript: string) => {
     setInput((prev) => (prev ? prev + ' ' + transcript : transcript))
   }, [])
-  const { isListening, supported: speechSupported, toggle: toggleSpeech } =
+  const { isListening, supported: speechSupported, start: startSpeech, stop: stopSpeech } =
     useSpeechRecognition(handleSpeechResult)
 
   const webgpuSupported = useMemo(
@@ -127,14 +127,24 @@ function App() {
               rows={1}
               disabled={status === 'generating'}
             />
-            {speechSupported && status !== 'generating' && (
+            {speechSupported && status !== 'generating' && !isListening && (
               <button
-                className={`btn btn-mic${isListening ? ' btn-mic-active' : ''}`}
+                className="btn btn-mic"
                 type="button"
-                onClick={toggleSpeech}
-                title={isListening ? 'Stop listening' : 'Voice input'}
+                onClick={startSpeech}
+                title="Voice input"
               >
-                {isListening ? '...' : '\uD83C\uDF99'}
+                {'\uD83C\uDF99'}
+              </button>
+            )}
+            {speechSupported && isListening && (
+              <button
+                className="btn btn-convert"
+                type="button"
+                onClick={stopSpeech}
+                title="Convert speech to text"
+              >
+                変換
               </button>
             )}
             {status === 'generating' ? (
