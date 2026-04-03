@@ -256,3 +256,61 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
+
+.debug-toggle {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.btn-debug-toggle {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.btn-debug-toggle:hover {
+  border-color: var(--color-text-muted);
+}
+
+.debug-panel {
+  max-height: 200px;
+  overflow-y: auto;
+  background: #0a0a0a;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  margin-bottom: 8px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.debug-line {
+  display: flex;
+  gap: 8px;
+}
+
+.debug-time {
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+.debug-msg {
+  word-break: break-all;
+}
+
+.debug-info .debug-msg {
+  color: var(--color-text-muted);
+}
+
+.debug-warn .debug-msg {
+  color: #e8a838;
+}
+
+.debug-error .debug-msg {
+  color: #ff6b6b;
+}
