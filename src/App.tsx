@@ -101,7 +101,6 @@ function App() {
     if (!activeThread || activeThreadId === prevThreadIdRef.current) return
     prevThreadIdRef.current = activeThreadId
     loadMessages(activeThread.messages)
-    setInput('')
   }, [activeThreadId, activeThread, loadMessages])
 
   // Persist messages to IndexedDB when they change
@@ -145,6 +144,7 @@ function App() {
       return
     }
     switchThread(id)
+    setInput('')
     if (!isDesktop()) setSidebarOpen(false)
   }
 
