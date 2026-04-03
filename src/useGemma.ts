@@ -19,6 +19,37 @@ type DebugLog = {
 
 let logId = 0
 
+// Detect if the page crashed during a previous download attempt.
+// iOS Safari kills pages that use too much memory, causing an infinite
+// reload → auto-download → crash loop.
+const DOWNLOAD_FLAG = 'gemma_downloading'
+const CRASH_COUNT_KEY = 'gemma_crash_count'
+const MAX_AUTO_RETRIES = 1
+
+function detectCrashLoop(): boolean {
+  try {
+    const wasDownloading = sessionStorage.getItem(DOWNLOAD_FLAG) === '1'
+    if (!wasDownloading) return false
+    const count = parseInt(sessionStorage.getItem(CRASH_COUNT_KEY) ?? '0', 10)
+    sessionStorage.setItem(CRASH_COUNT_KEY, String(count + 1))
+    sessionStorage.removeItem(DOWNLOAD_FLAG)
+    return count + 1 > MAX_AUTO_RETRIES
+  } catch {
+    return false
+  }
+}
+
+function markDownloadStarted() {
+  try { sessionStorage.setItem(DOWNLOAD_FLAG, '1') } catch { /* noop */ }
+}
+
+function markDownloadFinished() {
+  try {
+    sessionStorage.removeItem(DOWNLOAD_FLAG)
+    sessionStorage.removeItem(CRASH_COUNT_KEY)
+  } catch { /* noop */ }
+}
+
 export function useGemma() {
   const workerRef = useRef<Worker | null>(null)
   const initRef = useRef(false)
@@ -30,12 +61,22 @@ export function useGemma() {
   const [streamingContent, setStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([])
+  const [needsManualLoad, setNeedsManualLoad] = useState(false)
 
   const addLog = useCallback((message: string, level: DebugLog['level'] = 'info') => {
     const now = new Date()
     const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`
     setDebugLogs((prev) => [...prev, { id: logId++, time, message, level }])
   }, [])
+
+  const startLoad = useCallback(() => {
+    setNeedsManualLoad(false)
+    setError(null)
+    setStatus('loading')
+    markDownloadStarted()
+    workerRef.current?.postMessage({ type: 'load' })
+    addLog('Sent load message to worker')
+  }, [addLog])
 
   useEffect(() => {
     if (initRef.current) {
@@ -59,6 +100,7 @@ export function useGemma() {
           addLog(`[worker] ${data.message}`)
           break
         case 'loaded':
+          markDownloadFinished()
           setStatus('ready')
           setLoadingMessage('')
           setLoadingProgress(null)
@@ -80,6 +122,7 @@ export function useGemma() {
           addLog('[worker] Generation done')
           break
         case 'error':
+          markDownloadFinished()
           setError(data.message)
           setStatus('error')
           addLog(`[worker] Error: ${data.message}`, 'error')
@@ -93,8 +136,17 @@ export function useGemma() {
 
     workerRef.current = worker
 
+    // Check for crash loop before auto-loading
+    const isCrashLoop = detectCrashLoop()
+    if (isCrashLoop) {
+      addLog('Crash loop detected — skipping auto-load. Tap "Load Model" to retry.', 'warn')
+      setNeedsManualLoad(true)
+      return
+    }
+
     // Auto-load model on mount (cached models load instantly)
     setStatus('loading')
+    markDownloadStarted()
     worker.postMessage({ type: 'load' })
     addLog('Sent load message to worker')
   }, [addLog])
@@ -117,10 +169,8 @@ export function useGemma() {
   }, [])
 
   const retry = useCallback(() => {
-    setError(null)
-    setStatus('loading')
-    workerRef.current?.postMessage({ type: 'load' })
-  }, [])
+    startLoad()
+  }, [startLoad])
 
   return {
     status,
@@ -130,8 +180,10 @@ export function useGemma() {
     streamingContent,
     error,
     debugLogs,
+    needsManualLoad,
     sendMessage,
     stopGenerating,
     retry,
+    startLoad,
   }
 }
