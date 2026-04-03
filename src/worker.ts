@@ -25,6 +25,11 @@ type WorkerMessage =
 
 let abortController: AbortController | null = null
 
+// Timeout (ms) for the entire model load. If no progress is reported for
+// this duration, we assume the load has stalled (common on iPhone Safari 17
+// where WebGPU device creation can hang).
+const LOAD_STALL_TIMEOUT = 60_000
+
 async function loadModel() {
   if (isLoading || (tokenizer && model)) {
     if (tokenizer && model) {
@@ -34,16 +39,60 @@ async function loadModel() {
   }
   isLoading = true
 
+  // --- Validate WebGPU adapter availability ---
+  // Safari 17 on iPhone exposes navigator.gpu but requestAdapter() may
+  // return null or hang. Check before handing off to transformers.js.
+  self.postMessage({ type: 'loading', message: 'Checking WebGPU support...' })
+  const gpu = (navigator as unknown as { gpu?: GPU }).gpu
+  if (!gpu) {
+    throw new Error('WebGPU is not supported in this browser.')
+  }
+
+  let adapter: GPUAdapter | null = null
+  try {
+    adapter = await Promise.race([
+      gpu.requestAdapter(),
+      new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error('WebGPU adapter request timed out')), 10_000),
+      ),
+    ])
+  } catch (e) {
+    throw new Error(
+      `WebGPU adapter request failed: ${e instanceof Error ? e.message : 'unknown error'}`,
+    )
+  }
+  if (!adapter) {
+    throw new Error(
+      'WebGPU adapter is not available. Your device may not support WebGPU for this model.',
+    )
+  }
+
   self.postMessage({ type: 'loading', message: 'Loading tokenizer...' })
 
   tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID)
 
   self.postMessage({ type: 'loading', message: 'Loading model (this may take a few minutes)...' })
 
-  model = await AutoModelForCausalLM.from_pretrained(MODEL_ID, {
+  // Stall watchdog: if we receive no progress callback for LOAD_STALL_TIMEOUT ms,
+  // reject the load so the user isn't stuck forever.
+  let lastProgressTime = Date.now()
+  let stallTimer: ReturnType<typeof setInterval> | null = null
+  let rejectStall: ((reason: Error) => void) | null = null
+
+  const stallPromise = new Promise<never>((_resolve, reject) => {
+    rejectStall = reject
+    stallTimer = setInterval(() => {
+      if (Date.now() - lastProgressTime > LOAD_STALL_TIMEOUT) {
+        reject(new Error('Model loading stalled — no progress for 60 seconds.'))
+      }
+    }, 5_000)
+  })
+
+  const modelPromise = AutoModelForCausalLM.from_pretrained(MODEL_ID, {
     dtype: 'q4f16',
     device: 'webgpu',
     progress_callback: (progress: { status: string; progress?: number; file?: string }) => {
+      lastProgressTime = Date.now()
       if (progress.status === 'progress' && progress.progress !== undefined) {
         self.postMessage({
           type: 'loading',
@@ -53,6 +102,13 @@ async function loadModel() {
       }
     },
   })
+
+  try {
+    model = await Promise.race([modelPromise, stallPromise])
+  } finally {
+    if (stallTimer) clearInterval(stallTimer)
+    rejectStall = null
+  }
 
   isLoading = false
   self.postMessage({ type: 'loaded' })

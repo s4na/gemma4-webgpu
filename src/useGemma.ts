@@ -26,6 +26,42 @@ let globalWorkerReady = false
 let currentMessageHandler: ((event: MessageEvent) => void) | null = null
 let currentErrorHandler: ((event: ErrorEvent) => void) | null = null
 
+// --- Crash-loop detection for iPhone Safari ---
+// Safari on iOS kills pages under memory pressure during large downloads.
+// When the page is restored it auto-loads again, gets killed again → loop.
+// We track this via sessionStorage and require manual load after repeated crashes.
+const DOWNLOAD_FLAG = 'gemma_downloading'
+const CRASH_COUNT_KEY = 'gemma_crash_count'
+const MAX_AUTO_RETRIES = 1
+
+function detectCrashLoop(): boolean {
+  try {
+    const wasDownloading = sessionStorage.getItem(DOWNLOAD_FLAG) === '1'
+    if (!wasDownloading) {
+      sessionStorage.setItem(CRASH_COUNT_KEY, '0')
+      return false
+    }
+    // Page was killed while downloading
+    const count = parseInt(sessionStorage.getItem(CRASH_COUNT_KEY) ?? '0', 10) + 1
+    sessionStorage.setItem(CRASH_COUNT_KEY, String(count))
+    sessionStorage.removeItem(DOWNLOAD_FLAG)
+    return count > MAX_AUTO_RETRIES
+  } catch {
+    return false
+  }
+}
+
+function markDownloadStarted() {
+  try { sessionStorage.setItem(DOWNLOAD_FLAG, '1') } catch { /* noop */ }
+}
+
+function markDownloadFinished() {
+  try {
+    sessionStorage.removeItem(DOWNLOAD_FLAG)
+    sessionStorage.setItem(CRASH_COUNT_KEY, '0')
+  } catch { /* noop */ }
+}
+
 export function useGemma() {
   const workerRef = useRef<Worker | null>(null)
   const initRef = useRef(false)
@@ -37,6 +73,7 @@ export function useGemma() {
   const [streamingContent, setStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([])
+  const [needsManualLoad, setNeedsManualLoad] = useState(false)
 
   const addLog = useCallback((message: string, level: DebugLog['level'] = 'info') => {
     const now = new Date()
@@ -75,6 +112,15 @@ export function useGemma() {
       return
     }
 
+    // Crash-loop detection: if Safari killed the page during download
+    // multiple times, require the user to manually trigger loading.
+    const isCrashLoop = detectCrashLoop()
+    if (isCrashLoop) {
+      log('Crash loop detected — requiring manual load', 'warn')
+      setNeedsManualLoad(true)
+      return
+    }
+
     log('Initializing worker...')
 
     const worker = new Worker(new URL('./worker.ts', import.meta.url), {
@@ -88,6 +134,7 @@ export function useGemma() {
 
     // Auto-load model on mount (cached models load instantly)
     setStatus('loading')
+    markDownloadStarted()
     worker.postMessage({ type: 'load' })
     log('Sent load message to worker')
   }, [])
@@ -138,9 +185,27 @@ export function useGemma() {
     workerRef.current?.postMessage({ type: 'abort' })
   }, [])
 
+  const startLoad = useCallback(() => {
+    setNeedsManualLoad(false)
+    setStatus('loading')
+    markDownloadStarted()
+
+    if (!globalWorker) {
+      const worker = new Worker(new URL('./worker.ts', import.meta.url), {
+        type: 'module',
+      })
+      globalWorker = worker
+      workerRef.current = worker
+      attachWorkerListeners(worker, setStatus, setLoadingMessage, setLoadingProgress, setStreamingContent, setMessages, setError, messagesRef, addLogRef.current)
+    }
+
+    workerRef.current?.postMessage({ type: 'load' })
+  }, [])
+
   const retry = useCallback(() => {
     setError(null)
     setStatus('loading')
+    markDownloadStarted()
     workerRef.current?.postMessage({ type: 'load' })
   }, [])
 
@@ -152,9 +217,11 @@ export function useGemma() {
     streamingContent,
     error,
     debugLogs,
+    needsManualLoad,
     sendMessage,
     stopGenerating,
     retry,
+    startLoad,
     loadMessages,
   }
 }
@@ -194,6 +261,7 @@ function attachWorkerListeners(
         break
       case 'loaded':
         globalWorkerReady = true
+        markDownloadFinished()
         setStatus('ready')
         setLoadingMessage('')
         setLoadingProgress(null)
