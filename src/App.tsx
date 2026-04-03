@@ -43,7 +43,39 @@ function App() {
     removeThread,
   } = useThreadStore()
 
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const SIDEBAR_STORAGE_KEY = 'sidebar-collapsed'
+  const isDesktop = () => window.matchMedia('(min-width: 768px)').matches
+
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (isDesktop()) {
+      return localStorage.getItem(SIDEBAR_STORAGE_KEY) !== 'true'
+    }
+    return false
+  })
+
+  // Sync sidebar state with viewport changes
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const handler = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        setSidebarOpen(localStorage.getItem(SIDEBAR_STORAGE_KEY) !== 'true')
+      } else {
+        setSidebarOpen(false)
+      }
+    }
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev
+      if (isDesktop()) {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? 'false' : 'true')
+      }
+      return next
+    })
+  }
   const [showDebugLog, setShowDebugLog] = useState(false)
   const debugLogEndRef = useRef<HTMLDivElement>(null)
 
@@ -102,16 +134,16 @@ function App() {
 
   const handleNewChat = async () => {
     await newThread()
-    setSidebarOpen(false)
+    if (!isDesktop()) setSidebarOpen(false)
   }
 
   const handleSwitchThread = (id: string) => {
     if (id === activeThreadId) {
-      setSidebarOpen(false)
+      if (!isDesktop()) setSidebarOpen(false)
       return
     }
     switchThread(id)
-    setSidebarOpen(false)
+    if (!isDesktop()) setSidebarOpen(false)
   }
 
   const handleDeleteThread = (e: React.MouseEvent, id: string) => {
@@ -131,14 +163,19 @@ function App() {
 
   return (
     <>
-      {/* Sidebar overlay */}
+      {/* Sidebar overlay (mobile only) */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
       <div className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-header">
           <h2>Chats</h2>
-          <button className="btn-new-chat" onClick={handleNewChat}>+ New</button>
+          <div className="sidebar-header-actions">
+            <button className="btn-new-chat" onClick={handleNewChat}>+ New</button>
+            <button className="btn-close-sidebar" onClick={toggleSidebar} title="Close sidebar">
+              &times;
+            </button>
+          </div>
         </div>
         <div className="sidebar-threads">
           {threads.map((thread) => (
@@ -168,9 +205,9 @@ function App() {
       </div>
 
       {/* Main content */}
-      <div className="app">
+      <div className={`app ${sidebarOpen ? 'app-sidebar-open' : ''}`}>
         <header className="header">
-          <button className="btn-hamburger" onClick={() => setSidebarOpen(true)}>
+          <button className="btn-hamburger" onClick={toggleSidebar}>
             <span /><span /><span />
           </button>
           <div className="header-text">

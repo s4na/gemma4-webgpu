@@ -54,6 +54,27 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-close-sidebar {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.btn-close-sidebar:hover {
+  color: #fff;
+}
+
 .sidebar-header h2 {
   font-size: 1.1rem;
   font-weight: 600;
@@ -472,4 +493,32 @@
 
 .debug-error .debug-msg {
   color: #ff6b6b;
+}
+
+/* Desktop responsive: sidebar always visible */
+
+@media (min-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: none;
+  }
+
+  .app {
+    transition: margin-left 0.25s ease;
+  }
+
+  .app-sidebar-open {
+    margin-left: var(--sidebar-width);
+  }
+
+  .btn-hamburger {
+    display: flex;
+  }
 }
