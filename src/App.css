@@ -15,7 +15,163 @@
   --radius-lg: 12px;
   --content-max-width: 800px;
   --progress-bar-width: 300px;
+  --sidebar-width: 280px;
 }
+
+/* Sidebar */
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 90;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  background: #141414;
+  border-right: 1px solid var(--color-border);
+  z-index: 100;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-open {
+  transform: translateX(0);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar-header h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.btn-new-chat {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-new-chat:hover {
+  background: var(--color-primary-hover);
+}
+
+.sidebar-threads {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.thread-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.thread-item:hover {
+  background: var(--color-surface);
+}
+
+.thread-active {
+  background: var(--color-surface-alt);
+}
+
+.thread-active:hover {
+  background: var(--color-surface-alt);
+}
+
+.thread-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-title {
+  font-size: 0.9rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-meta {
+  font-size: 0.7rem;
+  color: var(--color-text-dim);
+  margin-top: 2px;
+}
+
+.btn-delete-thread {
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.thread-item:hover .btn-delete-thread {
+  opacity: 1;
+}
+
+.btn-delete-thread:hover {
+  color: var(--color-danger);
+}
+
+/* Hamburger button */
+
+.btn-hamburger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.btn-hamburger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--color-text-muted);
+  border-radius: 1px;
+  transition: background 0.15s;
+}
+
+.btn-hamburger:hover span {
+  background: #fff;
+}
+
+/* App layout */
 
 .app {
   display: flex;
@@ -30,6 +186,7 @@
   text-align: center;
   padding: 24px 0 16px;
   border-bottom: 1px solid var(--color-border);
+  position: relative;
 }
 
 .header h1 {
@@ -256,6 +413,8 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
+
+/* Debug panel */
 
 .debug-toggle {
   text-align: center;

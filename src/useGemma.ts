@@ -99,6 +99,15 @@ export function useGemma() {
     addLog('Sent load message to worker')
   }, [addLog])
 
+  const loadMessages = useCallback((msgs: Message[]) => {
+    messagesRef.current = msgs
+    setMessages(msgs)
+    setStreamingContent('')
+    if (msgs.length > 0) {
+      nextId = Math.max(...msgs.map((m) => m.id)) + 1
+    }
+  }, [])
+
   const sendMessage = useCallback((content: string) => {
     const userMessage: Message = { id: nextId++, role: 'user', content }
     messagesRef.current = [...messagesRef.current, userMessage]
@@ -133,5 +142,6 @@ export function useGemma() {
     sendMessage,
     stopGenerating,
     retry,
+    loadMessages,
   }
 }
