@@ -24,10 +24,14 @@ function App() {
     messages,
     streamingContent,
     error,
+    debugLogs,
     sendMessage,
     stopGenerating,
     retry,
   } = useGemma()
+
+  const [showDebugLog, setShowDebugLog] = useState(false)
+  const debugLogEndRef = useRef<HTMLDivElement>(null)
 
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -46,6 +50,10 @@ function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent])
+
+  useEffect(() => {
+    debugLogEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [debugLogs])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -158,6 +166,26 @@ function App() {
             )}
           </form>
         </>
+      )}
+      <div className="debug-toggle">
+        <button
+          className="btn-debug-toggle"
+          onClick={() => setShowDebugLog((prev) => !prev)}
+        >
+          {showDebugLog ? 'Hide' : 'Show'} Debug Log ({debugLogs.length})
+        </button>
+      </div>
+
+      {showDebugLog && (
+        <div className="debug-panel">
+          {debugLogs.map((log) => (
+            <div key={log.id} className={`debug-line debug-${log.level}`}>
+              <span className="debug-time">{log.time}</span>
+              <span className="debug-msg">{log.message}</span>
+            </div>
+          ))}
+          <div ref={debugLogEndRef} />
+        </div>
       )}
     </div>
   )

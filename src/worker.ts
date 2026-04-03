@@ -16,6 +16,7 @@ const MODEL_ID = 'onnx-community/gemma-3-1b-it-ONNX'
 
 let tokenizer: PreTrainedTokenizer | null = null
 let model: PreTrainedModel | null = null
+let isLoading = false
 
 type WorkerMessage =
   | { type: 'load' }
@@ -25,6 +26,14 @@ type WorkerMessage =
 let abortController: AbortController | null = null
 
 async function loadModel() {
+  if (isLoading || (tokenizer && model)) {
+    if (tokenizer && model) {
+      self.postMessage({ type: 'loaded' })
+    }
+    return
+  }
+  isLoading = true
+
   self.postMessage({ type: 'loading', message: 'Loading tokenizer...' })
 
   tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID)
@@ -45,6 +54,7 @@ async function loadModel() {
     },
   })
 
+  isLoading = false
   self.postMessage({ type: 'loaded' })
 }
 
@@ -107,6 +117,7 @@ self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
         break
     }
   } catch (e) {
+    isLoading = false
     self.postMessage({
       type: 'error',
       message: e instanceof Error ? e.message : 'Unknown error',
