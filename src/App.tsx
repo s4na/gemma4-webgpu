@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useGemma, type Message } from './useGemma'
+import { useSpeechRecognition } from './useSpeechRecognition'
 import './App.css'
 
 function ChatMessage({ message }: { message: Message }) {
@@ -31,6 +32,12 @@ function App() {
 
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const handleSpeechResult = useCallback((transcript: string) => {
+    setInput((prev) => (prev ? prev + ' ' + transcript : transcript))
+  }, [])
+  const { isListening, supported: speechSupported, toggle: toggleSpeech } =
+    useSpeechRecognition(handleSpeechResult)
 
   const webgpuSupported = useMemo(
     () => typeof navigator !== 'undefined' && 'gpu' in navigator,
@@ -130,6 +137,16 @@ function App() {
               rows={1}
               disabled={status === 'generating'}
             />
+            {speechSupported && status !== 'generating' && (
+              <button
+                className={`btn btn-mic${isListening ? ' btn-mic-active' : ''}`}
+                type="button"
+                onClick={toggleSpeech}
+                title={isListening ? 'Stop listening' : 'Voice input'}
+              >
+                {isListening ? '...' : '\uD83C\uDF99'}
+              </button>
+            )}
             {status === 'generating' ? (
               <button className="btn btn-stop" type="button" onClick={stopGenerating}>
                 Stop

@@ -223,3 +223,28 @@
 .input-field:disabled {
   opacity: 0.5;
 }
+
+.btn-mic {
+  background: var(--color-surface);
+  border: 1px solid #333;
+  color: var(--color-text);
+  padding: 10px 14px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.btn-mic:hover {
+  border-color: var(--color-primary);
+}
+
+.btn-mic-active {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
