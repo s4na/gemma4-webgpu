@@ -25,10 +25,11 @@ type WorkerMessage =
 
 let abortController: AbortController | null = null
 
-// Timeout (ms) for the entire model load. If no progress is reported for
-// this duration, we assume the load has stalled (common on iPhone Safari 17
-// where WebGPU device creation can hang).
-const LOAD_STALL_TIMEOUT = 60_000
+// Timeout (ms) for the initial model load phase. If no progress callback
+// fires at all within this window, the WebGPU pipeline is likely stuck
+// (common on iPhone Safari 17). Once the first progress callback arrives,
+// the watchdog is disarmed — slow downloads are fine.
+const INITIAL_PROGRESS_TIMEOUT = 90_000
 
 async function loadModel() {
   if (isLoading || (tokenizer && model)) {
@@ -73,26 +74,34 @@ async function loadModel() {
 
   self.postMessage({ type: 'loading', message: 'Loading model (this may take a few minutes)...' })
 
-  // Stall watchdog: if we receive no progress callback for LOAD_STALL_TIMEOUT ms,
-  // reject the load so the user isn't stuck forever.
-  let lastProgressTime = Date.now()
-  let stallTimer: ReturnType<typeof setInterval> | null = null
-  let rejectStall: ((reason: Error) => void) | null = null
+  // Stall watchdog: only guards the *initial* phase before the first
+  // progress callback arrives (WebGPU pipeline creation, shader compilation,
+  // etc.). Once downloading starts the watchdog is disarmed — a slow network
+  // is not a stall.
+  let progressReceived = false
+  let stallTimer: ReturnType<typeof setTimeout> | null = null
 
   const stallPromise = new Promise<never>((_resolve, reject) => {
-    rejectStall = reject
-    stallTimer = setInterval(() => {
-      if (Date.now() - lastProgressTime > LOAD_STALL_TIMEOUT) {
-        reject(new Error('Model loading stalled — no progress for 60 seconds.'))
+    stallTimer = setTimeout(() => {
+      if (!progressReceived) {
+        reject(
+          new Error(
+            'Model loading stalled — WebGPU initialization did not complete within 90 seconds.',
+          ),
+        )
       }
-    }, 5_000)
+    }, INITIAL_PROGRESS_TIMEOUT)
   })
 
   const modelPromise = AutoModelForCausalLM.from_pretrained(MODEL_ID, {
     dtype: 'q4f16',
     device: 'webgpu',
     progress_callback: (progress: { status: string; progress?: number; file?: string }) => {
-      lastProgressTime = Date.now()
+      if (!progressReceived) {
+        progressReceived = true
+        // First progress arrived — disarm the watchdog
+        if (stallTimer) { clearTimeout(stallTimer); stallTimer = null }
+      }
       if (progress.status === 'progress' && progress.progress !== undefined) {
         self.postMessage({
           type: 'loading',
@@ -106,8 +115,7 @@ async function loadModel() {
   try {
     model = await Promise.race([modelPromise, stallPromise])
   } finally {
-    if (stallTimer) clearInterval(stallTimer)
-    rejectStall = null
+    if (stallTimer) { clearTimeout(stallTimer); stallTimer = null }
   }
 
   isLoading = false
