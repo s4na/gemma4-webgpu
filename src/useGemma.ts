@@ -257,7 +257,12 @@ function attachWorkerListeners(
         setStatus('loading')
         setLoadingMessage(data.message)
         setLoadingProgress(data.progress ?? null)
-        addLog(`[worker] ${data.message}`)
+        // Only log non-progress messages (e.g. "Checking WebGPU...",
+        // "Loading tokenizer...") to avoid flooding the debug panel.
+        // Download progress is visible via the progress bar.
+        if (data.progress == null) {
+          addLog(`[worker] ${data.message}`)
+        }
         break
       case 'loaded':
         globalWorkerReady = true
