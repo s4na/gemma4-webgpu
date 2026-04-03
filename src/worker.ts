@@ -68,6 +68,20 @@ async function loadModel() {
     )
   }
 
+  // --- Check device capabilities before downloading ---
+  // The q4f16 1B model requires a reasonable GPU buffer size.
+  // Devices with very small maxBufferSize cannot run the model even if
+  // WebGPU is technically available.
+  const MIN_BUFFER_SIZE = 256 * 1024 * 1024 // 256 MB
+  const maxBuffer = adapter.limits.maxBufferSize
+  if (maxBuffer < MIN_BUFFER_SIZE) {
+    throw new Error(
+      `Your GPU does not have enough memory to run this model. ` +
+      `Required buffer size: ${MIN_BUFFER_SIZE / 1024 / 1024} MB, ` +
+      `available: ${Math.round(maxBuffer / 1024 / 1024)} MB.`,
+    )
+  }
+
   self.postMessage({ type: 'loading', message: 'Loading tokenizer...' })
 
   tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID)
@@ -93,6 +107,11 @@ async function loadModel() {
     }, INITIAL_PROGRESS_TIMEOUT)
   })
 
+  // Throttle progress updates: only send when file changes or progress
+  // advances by at least 5 percentage points.
+  let lastProgressFile = ''
+  let lastProgressPct = -5
+
   const modelPromise = AutoModelForCausalLM.from_pretrained(MODEL_ID, {
     dtype: 'q4f16',
     device: 'webgpu',
@@ -103,11 +122,19 @@ async function loadModel() {
         if (stallTimer) { clearTimeout(stallTimer); stallTimer = null }
       }
       if (progress.status === 'progress' && progress.progress !== undefined) {
-        self.postMessage({
-          type: 'loading',
-          message: `Downloading ${progress.file ?? 'model'}... ${Math.round(progress.progress)}%`,
-          progress: progress.progress,
-        })
+        const file = progress.file ?? 'model'
+        const pct = Math.round(progress.progress)
+        const fileChanged = file !== lastProgressFile
+        const significantChange = pct - lastProgressPct >= 5 || pct === 100
+        if (fileChanged || significantChange) {
+          lastProgressFile = file
+          lastProgressPct = pct
+          self.postMessage({
+            type: 'loading',
+            message: `Downloading ${file}... ${pct}%`,
+            progress: progress.progress,
+          })
+        }
       }
     },
   })
