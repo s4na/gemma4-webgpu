@@ -12,6 +12,7 @@ type ModelStatus = 'idle' | 'loading' | 'ready' | 'generating' | 'error'
 
 export function useGemma() {
   const workerRef = useRef<Worker | null>(null)
+  const initRef = useRef(false)
   const messagesRef = useRef<Message[]>([])
   const [status, setStatus] = useState<ModelStatus>('idle')
   const [loadingMessage, setLoadingMessage] = useState('')
@@ -21,6 +22,9 @@ export function useGemma() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (initRef.current) return
+    initRef.current = true
+
     const worker = new Worker(new URL('./worker.ts', import.meta.url), {
       type: 'module',
     })
@@ -64,8 +68,6 @@ export function useGemma() {
     // Auto-load model on mount (cached models load instantly)
     setStatus('loading')
     worker.postMessage({ type: 'load' })
-
-    return () => worker.terminate()
   }, [])
 
   const sendMessage = useCallback((content: string) => {
