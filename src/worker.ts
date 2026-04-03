@@ -2,9 +2,15 @@ import {
   AutoTokenizer,
   AutoModelForCausalLM,
   TextStreamer,
+  env,
   type PreTrainedTokenizer,
   type PreTrainedModel,
 } from '@huggingface/transformers'
+
+// Enable browser Cache API for model caching
+env.useBrowserCache = true
+env.useFS = false
+env.useFSCache = false
 
 const MODEL_ID = 'onnx-community/gemma-3-1b-it-ONNX'
 
