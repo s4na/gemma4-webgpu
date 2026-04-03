@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useGemma, type Message } from './useGemma'
 import { useSpeechRecognition } from './useSpeechRecognition'
+import { useThreadStore } from './useThreadStore'
 import './App.css'
 
 function ChatMessage({ message }: { message: Message }) {
@@ -28,13 +29,27 @@ function App() {
     sendMessage,
     stopGenerating,
     retry,
+    loadMessages,
   } = useGemma()
 
+  const {
+    threads,
+    activeThread,
+    activeThreadId,
+    loaded: threadsLoaded,
+    saveMessages,
+    newThread,
+    switchThread,
+    removeThread,
+  } = useThreadStore()
+
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showDebugLog, setShowDebugLog] = useState(false)
   const debugLogEndRef = useRef<HTMLDivElement>(null)
 
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const prevThreadIdRef = useRef<string | null>(null)
 
   const handleSpeechResult = useCallback((transcript: string) => {
     setInput((prev) => (prev ? prev + ' ' + transcript : transcript))
@@ -46,6 +61,21 @@ function App() {
     () => typeof navigator !== 'undefined' && 'gpu' in navigator,
     [],
   )
+
+  // Load messages when switching threads
+  useEffect(() => {
+    if (!activeThread || activeThreadId === prevThreadIdRef.current) return
+    prevThreadIdRef.current = activeThreadId
+    loadMessages(activeThread.messages)
+    setInput('')
+  }, [activeThreadId, activeThread, loadMessages])
+
+  // Persist messages to IndexedDB when they change
+  useEffect(() => {
+    if (!threadsLoaded || !activeThreadId) return
+    if (prevThreadIdRef.current !== activeThreadId) return
+    saveMessages(messages)
+  }, [messages, activeThreadId, threadsLoaded, saveMessages])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -70,124 +100,197 @@ function App() {
     }
   }
 
+  const handleNewChat = async () => {
+    await newThread()
+    setSidebarOpen(false)
+  }
+
+  const handleSwitchThread = (id: string) => {
+    if (id === activeThreadId) {
+      setSidebarOpen(false)
+      return
+    }
+    switchThread(id)
+    setSidebarOpen(false)
+  }
+
+  const handleDeleteThread = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    removeThread(id)
+  }
+
+  const formatDate = (ts: number) => {
+    const d = new Date(ts)
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+    if (isToday) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  }
+
   return (
-    <div className="app">
-      <header className="header">
-        <h1>Gemma 3 WebGPU</h1>
-        <p className="subtitle">
-          AI running entirely in your browser — no server, no data leaves your device
-        </p>
-      </header>
+    <>
+      {/* Sidebar overlay */}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
-      {!webgpuSupported && (
-        <div className="error-banner">
-          Your browser does not support WebGPU. Please use Chrome or Edge.
+      {/* Sidebar */}
+      <div className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
+        <div className="sidebar-header">
+          <h2>Chats</h2>
+          <button className="btn-new-chat" onClick={handleNewChat}>+ New</button>
         </div>
-      )}
-
-      {(status === 'idle' || status === 'loading') && webgpuSupported && (
-        <div className="load-section">
-          <p>{loadingMessage || 'Loading model...'}</p>
-          {loadingProgress !== null && (
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${loadingProgress}%` }} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {status === 'error' && (
-        <div className="error-banner">
-          <p>{error}</p>
-          <button className="btn btn-primary" onClick={retry} style={{ marginTop: 8 }}>
-            Retry
-          </button>
-        </div>
-      )}
-
-      {(status === 'ready' || status === 'generating') && (
-        <>
-          <div className="chat-area">
-            {messages.length === 0 && !streamingContent && (
-              <div className="empty-state">Start a conversation with Gemma</div>
-            )}
-            {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
-            ))}
-            {streamingContent && (
-              <div className="message message-assistant">
-                <div className="message-label">Gemma</div>
-                <div className="message-content">
-                  <ReactMarkdown>{streamingContent}</ReactMarkdown>
+        <div className="sidebar-threads">
+          {threads.map((thread) => (
+            <div
+              key={thread.id}
+              className={`thread-item ${thread.id === activeThreadId ? 'thread-active' : ''}`}
+              onClick={() => handleSwitchThread(thread.id)}
+            >
+              <div className="thread-info">
+                <div className="thread-title">{thread.title}</div>
+                <div className="thread-meta">
+                  {thread.messages.length} msgs &middot; {formatDate(thread.updatedAt)}
                 </div>
               </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <form className="input-area" onSubmit={handleSubmit}>
-            <textarea
-              className="input-field"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message... (Shift+Enter for new line)"
-              rows={1}
-              disabled={status === 'generating'}
-            />
-            {speechSupported && status !== 'generating' && !isListening && (
-              <button
-                className="btn btn-mic"
-                type="button"
-                onClick={startSpeech}
-                title="Voice input"
-              >
-                {'\uD83C\uDF99'}
-              </button>
-            )}
-            {speechSupported && isListening && (
-              <button
-                className="btn btn-voice-stop"
-                type="button"
-                onClick={stopSpeech}
-                title="Stop voice input"
-              >
-                停止
-              </button>
-            )}
-            {status === 'generating' ? (
-              <button className="btn btn-stop" type="button" onClick={stopGenerating}>
-                Stop
-              </button>
-            ) : (
-              <button className="btn btn-send" type="submit" disabled={!input.trim()}>
-                Send
-              </button>
-            )}
-          </form>
-        </>
-      )}
-      <div className="debug-toggle">
-        <button
-          className="btn-debug-toggle"
-          onClick={() => setShowDebugLog((prev) => !prev)}
-        >
-          {showDebugLog ? 'Hide' : 'Show'} Debug Log ({debugLogs.length})
-        </button>
-      </div>
-
-      {showDebugLog && (
-        <div className="debug-panel">
-          {debugLogs.map((log) => (
-            <div key={log.id} className={`debug-line debug-${log.level}`}>
-              <span className="debug-time">{log.time}</span>
-              <span className="debug-msg">{log.message}</span>
+              {threads.length > 1 && (
+                <button
+                  className="btn-delete-thread"
+                  onClick={(e) => handleDeleteThread(e, thread.id)}
+                  title="Delete"
+                >
+                  &times;
+                </button>
+              )}
             </div>
           ))}
-          <div ref={debugLogEndRef} />
         </div>
-      )}
-    </div>
+      </div>
+
+      {/* Main content */}
+      <div className="app">
+        <header className="header">
+          <button className="btn-hamburger" onClick={() => setSidebarOpen(true)}>
+            <span /><span /><span />
+          </button>
+          <div className="header-text">
+            <h1>Gemma 3 WebGPU</h1>
+            <p className="subtitle">
+              AI running entirely in your browser — no server, no data leaves your device
+            </p>
+          </div>
+        </header>
+
+        {!webgpuSupported && (
+          <div className="error-banner">
+            Your browser does not support WebGPU. Please use Chrome or Edge.
+          </div>
+        )}
+
+        {(status === 'idle' || status === 'loading') && webgpuSupported && (
+          <div className="load-section">
+            <p>{loadingMessage || 'Loading model...'}</p>
+            {loadingProgress !== null && (
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${loadingProgress}%` }} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="error-banner">
+            <p>{error}</p>
+            <button className="btn btn-primary" onClick={retry} style={{ marginTop: 8 }}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {(status === 'ready' || status === 'generating') && (
+          <>
+            <div className="chat-area">
+              {messages.length === 0 && !streamingContent && (
+                <div className="empty-state">Start a conversation with Gemma</div>
+              )}
+              {messages.map((msg) => (
+                <ChatMessage key={msg.id} message={msg} />
+              ))}
+              {streamingContent && (
+                <div className="message message-assistant">
+                  <div className="message-label">Gemma</div>
+                  <div className="message-content">
+                    <ReactMarkdown>{streamingContent}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <form className="input-area" onSubmit={handleSubmit}>
+              <textarea
+                className="input-field"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type a message... (Shift+Enter for new line)"
+                rows={1}
+                disabled={status === 'generating'}
+              />
+              {speechSupported && status !== 'generating' && !isListening && (
+                <button
+                  className="btn btn-mic"
+                  type="button"
+                  onClick={startSpeech}
+                  title="Voice input"
+                >
+                  {'\uD83C\uDF99'}
+                </button>
+              )}
+              {speechSupported && isListening && (
+                <button
+                  className="btn btn-voice-stop"
+                  type="button"
+                  onClick={stopSpeech}
+                  title="Stop voice input"
+                >
+                  停止
+                </button>
+              )}
+              {status === 'generating' ? (
+                <button className="btn btn-stop" type="button" onClick={stopGenerating}>
+                  Stop
+                </button>
+              ) : (
+                <button className="btn btn-send" type="submit" disabled={!input.trim()}>
+                  Send
+                </button>
+              )}
+            </form>
+          </>
+        )}
+        <div className="debug-toggle">
+          <button
+            className="btn-debug-toggle"
+            onClick={() => setShowDebugLog((prev) => !prev)}
+          >
+            {showDebugLog ? 'Hide' : 'Show'} Debug Log ({debugLogs.length})
+          </button>
+        </div>
+
+        {showDebugLog && (
+          <div className="debug-panel">
+            {debugLogs.map((log) => (
+              <div key={log.id} className={`debug-line debug-${log.level}`}>
+                <span className="debug-time">{log.time}</span>
+                <span className="debug-msg">{log.message}</span>
+              </div>
+            ))}
+            <div ref={debugLogEndRef} />
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
