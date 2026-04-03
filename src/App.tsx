@@ -24,7 +24,6 @@ function App() {
     messages,
     streamingContent,
     error,
-    loadModel,
     sendMessage,
     stopGenerating,
     retry,
@@ -78,18 +77,9 @@ function App() {
         </div>
       )}
 
-      {status === 'idle' && webgpuSupported && (
+      {(status === 'idle' || status === 'loading') && webgpuSupported && (
         <div className="load-section">
-          <p>Click to download and load the model. First time may take a few minutes.</p>
-          <button className="btn btn-primary" onClick={loadModel}>
-            Load Model
-          </button>
-        </div>
-      )}
-
-      {status === 'loading' && (
-        <div className="load-section">
-          <p>{loadingMessage}</p>
+          <p>{loadingMessage || 'Loading model...'}</p>
           {loadingProgress !== null && (
             <div className="progress-bar">
               <div className="progress-fill" style={{ width: `${loadingProgress}%` }} />
