@@ -213,7 +213,7 @@ function App() {
             <span /><span /><span />
           </button>
           <div className="header-text">
-            <h1>Gemma 3 WebGPU</h1>
+            <h1>Gemma 4 WebGPU</h1>
             <p className="subtitle">
               AI running entirely in your browser — no server, no data leaves your device
             </p>
