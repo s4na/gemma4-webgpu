@@ -1,4 +1,4 @@
-# Gemma 3 WebGPU Chat
+# Gemma 4 WebGPU Chat
 
 Run Google's Gemma model directly in the browser using WebGPU. No server required — all inference happens on your device.
 
